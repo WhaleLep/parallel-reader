@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>对照阅读器</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <h1>对照阅读器</h1>
+        <p>选择英文原文和中文译文，按段落同步阅读</p>
+      </div>
+      <div class="header-actions">
+        <input id="upload-input" type="file" accept=".md,text/markdown,text/plain" multiple hidden>
+        <button id="upload-button" class="secondary" type="button">导入 Markdown</button>
+        <button id="manage-button" class="secondary" type="button">管理本地文档</button>
+        <a href="/notes/">返回 LeafWiki</a>
+      </div>
+    </header>
+
+    <section class="controls" aria-label="文档选择">
+      <label>
+        <span>英文原文</span>
+        <select id="source-select"><option value="">选择 Markdown 文档</option></select>
+      </label>
+      <button id="swap-button" class="secondary" type="button" aria-label="交换文档">⇄ 交换</button>
+      <label>
+        <span>中文译文</span>
+        <select id="translation-select"><option value="">选择 Markdown 文档</option></select>
+      </label>
+      <button id="open-button" class="primary" type="button">开始对照</button>
+    </section>
+
+    <section id="reader-toolbar" class="reader-toolbar hidden" aria-label="阅读控制">
+      <label>同步方式
+        <select id="sync-mode">
+          <option value="jump">段落跳转</option>
+          <option value="off">关闭同步</option>
+        </select>
+      </label>
+      <button id="mapping-button" class="secondary" type="button">调整对应</button>
+      <button id="reset-mapping-button" class="secondary" type="button">重新自动对应</button>
+      <button id="collapse-top-button" class="secondary" type="button">收起顶部</button>
+      <span id="alignment-status" class="status"></span>
+    </section>
+
+    <div id="message" class="message">正在读取 Markdown 文档列表……</div>
+
+    <section id="reader" class="reader hidden" aria-label="双语文档">
+      <div class="pane">
+        <div class="pane-title"><strong>原文</strong><span id="source-name"></span></div>
+        <article id="source-content" class="document" aria-label="英文原文"></article>
+      </div>
+      <div id="splitter" class="splitter" role="separator" aria-label="调整左右文档宽度" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div>
+      <div class="pane translation-pane">
+        <div class="pane-title">
+          <strong>译文</strong><span id="translation-name"></span>
+          <button id="restore-top-button" class="secondary restore-top-button hidden" type="button">显示工具栏</button>
+        </div>
+        <article id="translation-content" class="document" aria-label="中文译文"></article>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="manage-dialog">
+    <div class="dialog-header">
+      <div><h2>本地 Markdown</h2><p>保存在 Reader 独立的数据目录中</p></div>
+      <button id="close-manage-button" class="secondary" type="button">关闭</button>
+    </div>
+    <div id="local-document-list" class="local-document-list"></div>
+  </dialog>
+
+  <script src="marked.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

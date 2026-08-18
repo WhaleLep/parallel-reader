@@ -1,0 +1,39 @@
+services:
+  parallel-reader:
+    image: python:3.13-alpine
+    container_name: parallel-reader
+    restart: unless-stopped
+    user: "1000:1000"
+    command: ["python", "/app/app.py"]
+    ports:
+      - "127.0.0.1:8084:8080"
+    environment:
+      DOCUMENTS_DIR: /documents
+      DATA_DIR: /data
+      STATIC_DIR: /app/static
+      PORT: "8080"
+    volumes:
+      - ./app.py:/app/app.py:ro
+      - ./static:/app/static:ro
+      - ${LEAFWIKI_DOCUMENTS_PATH:-/data/leafwiki/root}:/documents:ro
+      - ${READER_DATA_PATH:-/data/parallel-reader}:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 64
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - 'import socket; s=socket.create_connection(("127.0.0.1",8080),2); s.sendall(b"GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n"); assert b"200 OK" in s.recv(128)'
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
