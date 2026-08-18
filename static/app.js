@@ -14,6 +14,8 @@ const elements = {
   translationContent: document.getElementById("translation-content"),
   sourceName: document.getElementById("source-name"),
   translationName: document.getElementById("translation-name"),
+  temporaryInput: document.getElementById("temporary-input"),
+  temporaryButton: document.getElementById("temporary-button"),
   uploadInput: document.getElementById("upload-input"),
   uploadButton: document.getElementById("upload-button"),
   manageButton: document.getElementById("manage-button"),
@@ -27,6 +29,7 @@ const elements = {
 
 const state = {
   documents: [],
+  temporaryDocuments: [],
   pair: null,
   sourceBlocks: [],
   translationBlocks: [],
@@ -39,6 +42,7 @@ const state = {
   ignoreScrollUntil: { source: 0, translation: 0 },
   scrollFrames: { source: null, translation: null },
   progressTimer: null,
+  restoredLastPair: false,
 };
 
 function showMessage(text, isError = false) {
@@ -93,8 +97,16 @@ async function requestJson(url, options = {}) {
 
 function documentLabel(item) {
   if (!item) return "未知文档";
-  const origin = item.origin === "local" ? "本地" : "LeafWiki";
+  const origin = item.origin === "temporary" ? "临时" : item.origin === "local" ? "书库" : "LeafWiki";
   return `${origin} · ${item.display_path.replace(/\.md$/i, "")}`;
+}
+
+function availableDocuments() {
+  return [...state.temporaryDocuments, ...state.documents];
+}
+
+function findDocument(identifier) {
+  return availableDocuments().find((item) => item.path === identifier);
 }
 
 function normalizeSavedIdentifier(identifier) {
@@ -103,22 +115,26 @@ function normalizeSavedIdentifier(identifier) {
 }
 
 function populateDocuments() {
+  const documents = availableDocuments();
   for (const select of [elements.sourceSelect, elements.translationSelect]) {
     const current = select.value;
     select.replaceChildren(new Option("选择 Markdown 文档", ""));
-    for (const item of state.documents) {
+    for (const item of documents) {
       select.add(new Option(documentLabel(item), item.path));
     }
-    if (state.documents.some((item) => item.path === current)) select.value = current;
+    if (documents.some((item) => item.path === current)) select.value = current;
   }
-  const saved = JSON.parse(localStorage.getItem("parallel-reader:last-pair") || "null");
-  const savedSource = normalizeSavedIdentifier(saved?.source);
-  const savedTranslation = normalizeSavedIdentifier(saved?.translation);
-  if (savedSource && state.documents.some((item) => item.path === savedSource)) {
-    elements.sourceSelect.value = savedSource;
-  }
-  if (savedTranslation && state.documents.some((item) => item.path === savedTranslation)) {
-    elements.translationSelect.value = savedTranslation;
+  if (!state.restoredLastPair) {
+    const saved = JSON.parse(localStorage.getItem("parallel-reader:last-pair") || "null");
+    const savedSource = normalizeSavedIdentifier(saved?.source);
+    const savedTranslation = normalizeSavedIdentifier(saved?.translation);
+    if (savedSource && state.documents.some((item) => item.path === savedSource)) {
+      elements.sourceSelect.value = savedSource;
+    }
+    if (savedTranslation && state.documents.some((item) => item.path === savedTranslation)) {
+      elements.translationSelect.value = savedTranslation;
+    }
+    state.restoredLastPair = true;
   }
 }
 
@@ -167,9 +183,56 @@ async function refreshDocuments() {
   const payload = await requestJson("api/documents");
   state.documents = payload.documents || [];
   populateDocuments();
-  if (state.documents.some((item) => item.path === source)) elements.sourceSelect.value = source;
-  if (state.documents.some((item) => item.path === translation)) elements.translationSelect.value = translation;
+  if (findDocument(source)) elements.sourceSelect.value = source;
+  if (findDocument(translation)) elements.translationSelect.value = translation;
   renderLocalDocuments();
+}
+
+async function readTemporaryFile(file) {
+  if (!file.name.toLowerCase().endsWith(".md")) throw new Error(`${file.name} 不是 Markdown 文件`);
+  if (!file.size) throw new Error(`${file.name} 是空文件`);
+  if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name} 超过 10 MiB`);
+  const bytes = await file.arrayBuffer();
+  let content;
+  try {
+    content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error(`${file.name} 必须使用 UTF-8 编码`);
+  }
+  return {
+    path: `temporary:${crypto.randomUUID()}`,
+    name: file.name.replace(/\.md$/i, ""),
+    origin: "temporary",
+    display_path: file.name,
+    modified_at: Math.floor(file.lastModified / 1000),
+    size: file.size,
+    content,
+  };
+}
+
+async function openTemporaryDocuments(files) {
+  const selected = [...files];
+  if (!selected.length) return;
+  if (selected.length > 2) return showMessage("临时阅读一次最多选择两个 Markdown 文件。", true);
+  elements.temporaryButton.disabled = true;
+  try {
+    showMessage("正在本地读取临时 Markdown……");
+    const temporaryDocuments = await Promise.all(selected.map(readTemporaryFile));
+    state.temporaryDocuments = temporaryDocuments;
+    populateDocuments();
+    if (temporaryDocuments[0]) elements.sourceSelect.value = temporaryDocuments[0].path;
+    if (temporaryDocuments[1]) elements.translationSelect.value = temporaryDocuments[1].path;
+    if (temporaryDocuments.length === 2) {
+      await openPair();
+    } else {
+      showMessage("临时文件已载入当前页面。请选择另一篇文档后开始对照。", false);
+    }
+  } catch (error) {
+    showMessage(error.message, true);
+  } finally {
+    elements.temporaryButton.disabled = false;
+    elements.temporaryInput.value = "";
+  }
 }
 
 async function uploadDocuments(files) {
@@ -572,7 +635,7 @@ function handleScroll(side) {
 }
 
 async function saveMapping() {
-  if (!state.pair) return;
+  if (!state.pair || state.pair.temporary) return;
   await requestJson(`api/pairs/${state.pair.id}/mapping`, {
     method: "PUT",
     body: JSON.stringify({ mapping: state.mapping }),
@@ -582,7 +645,7 @@ async function saveMapping() {
 function scheduleProgressSave() {
   clearTimeout(state.progressTimer);
   state.progressTimer = setTimeout(async () => {
-    if (!state.pair) return;
+    if (!state.pair || state.pair.temporary) return;
     try {
       await requestJson(`api/pairs/${state.pair.id}/progress`, {
         method: "PUT",
@@ -655,13 +718,22 @@ async function openPair() {
   elements.openButton.disabled = true;
   showMessage("正在读取并对齐文档……");
   try {
+    const sourceItem = findDocument(source);
+    const translationItem = findDocument(translation);
+    const isTemporary = sourceItem?.origin === "temporary" || translationItem?.origin === "temporary";
+    const readDocument = (item) => item.origin === "temporary"
+      ? Promise.resolve({ path: item.path, content: item.content })
+      : requestJson(`api/document?path=${encodeURIComponent(item.path)}`);
+    const openPersistentPair = () => requestJson("api/pairs/open", {
+      method: "POST",
+      body: JSON.stringify({ source, translation }),
+    });
     const [sourceDocument, translationDocument, pair] = await Promise.all([
-      requestJson(`api/document?path=${encodeURIComponent(source)}`),
-      requestJson(`api/document?path=${encodeURIComponent(translation)}`),
-      requestJson("api/pairs/open", {
-        method: "POST",
-        body: JSON.stringify({ source, translation }),
-      }),
+      readDocument(sourceItem),
+      readDocument(translationItem),
+      isTemporary
+        ? Promise.resolve({ temporary: true, source, translation, mapping: {}, progress: {} })
+        : openPersistentPair(),
     ]);
     state.pair = pair;
     state.sourceBlocks = parseMarkdownBlocks(sourceDocument.content);
@@ -672,8 +744,8 @@ async function openPair() {
     buildReverseMapping();
     renderDocument(elements.sourceContent, state.sourceBlocks, "source");
     renderDocument(elements.translationContent, state.translationBlocks, "translation");
-    elements.sourceName.textContent = documentLabel(state.documents.find((item) => item.path === source));
-    elements.translationName.textContent = documentLabel(state.documents.find((item) => item.path === translation));
+    elements.sourceName.textContent = documentLabel(sourceItem);
+    elements.translationName.textContent = documentLabel(translationItem);
     elements.reader.classList.remove("hidden");
     elements.toolbar.classList.remove("hidden");
     updateAlignmentStatus();
@@ -687,8 +759,13 @@ async function openPair() {
       scrollToBlock("translation", translationProgress, "auto");
       activateFrom("source", sourceProgress, false);
     });
-    localStorage.setItem("parallel-reader:last-pair", JSON.stringify({ source, translation }));
-    showMessage("点击或选中任一段落可联动高亮；滚动时按段落跳转同步。", false);
+    if (!isTemporary) localStorage.setItem("parallel-reader:last-pair", JSON.stringify({ source, translation }));
+    showMessage(
+      isTemporary
+        ? "临时阅读：文件、进度和段落对应只存在于当前页面，关闭或刷新后消失。"
+        : "点击或选中任一段落可联动高亮；滚动时按段落跳转同步。",
+      false,
+    );
   } catch (error) {
     showMessage(error.message, true);
   } finally {
@@ -720,6 +797,8 @@ elements.splitter.addEventListener("keydown", (event) => {
   const current = parseFloat(elements.splitter.getAttribute("aria-valuenow")) / 100;
   applySplitRatio(current + (event.key === "ArrowLeft" ? -0.02 : 0.02));
 });
+elements.temporaryButton.addEventListener("click", () => elements.temporaryInput.click());
+elements.temporaryInput.addEventListener("change", () => openTemporaryDocuments(elements.temporaryInput.files));
 elements.uploadButton.addEventListener("click", () => elements.uploadInput.click());
 elements.uploadInput.addEventListener("change", () => uploadDocuments(elements.uploadInput.files));
 elements.manageButton.addEventListener("click", () => {

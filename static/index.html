@@ -14,12 +14,31 @@
         <p>选择英文原文和中文译文，按段落同步阅读</p>
       </div>
       <div class="header-actions">
-        <input id="upload-input" type="file" accept=".md,text/markdown,text/plain" multiple hidden>
-        <button id="upload-button" class="secondary" type="button">导入 Markdown</button>
-        <button id="manage-button" class="secondary" type="button">管理本地文档</button>
         <a href="/notes/">返回 LeafWiki</a>
       </div>
     </header>
+
+    <section class="document-entry" aria-label="打开 Markdown 的方式">
+      <div class="entry-option temporary-entry">
+        <div>
+          <strong>临时阅读</strong>
+          <p>文件只保存在当前页面内存中，关闭或刷新后消失</p>
+        </div>
+        <input id="temporary-input" type="file" accept=".md,text/markdown,text/plain" multiple hidden>
+        <button id="temporary-button" class="primary" type="button">临时打开文件</button>
+      </div>
+      <div class="entry-option library-entry">
+        <div>
+          <strong>服务器书库</strong>
+          <p>文件上传到服务器长期保存，可保留进度和段落对应</p>
+        </div>
+        <input id="upload-input" type="file" accept=".md,text/markdown,text/plain" multiple hidden>
+        <div class="entry-buttons">
+          <button id="upload-button" class="secondary" type="button">导入到书库</button>
+          <button id="manage-button" class="secondary" type="button">管理书库</button>
+        </div>
+      </div>
+    </section>
 
     <section class="controls" aria-label="文档选择">
       <label>

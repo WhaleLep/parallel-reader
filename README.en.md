@@ -13,14 +13,23 @@ Translations are created with an external tool such as ChatGPT. Parallel Reader 
 - Side-by-side reading with paragraph-jump synchronization and linked highlighting
 - Automatic alignment for headings, paragraphs, lists, quotes, code blocks, and tables
 - Manual alignment corrections and saved reading progress
+- Open Markdown temporarily in browser memory without uploading files, progress, or alignment
 - Import, rename, and delete local Markdown, or load an existing Markdown directory read-only
 - Collapsible controls and an adjustable desktop split
 - Automatic stacked layout on mobile
 - No frontend build step, CDN, or translation API dependency
 
-## Quick start
+## Frontend-only temporary reading
 
-[uv](https://docs.astral.sh/uv/) is recommended:
+The **Open temporary files** workflow does not require `app.py`. Open `static/index.html` directly in a modern browser, or serve the `static/` directory as an ordinary static website.
+
+The browser reads the Markdown files directly. Rendering, automatic alignment, synchronized navigation, and manual corrections all run in the current page. File contents are never uploaded; reading progress and alignment are not persisted and disappear when the page is closed or refreshed.
+
+LeafWiki documents, the server library, and persistent progress are unavailable in frontend-only mode. The page may report that the library backend is unavailable, but temporary reading still works.
+
+## Full application
+
+Run the Python backend when you need LeafWiki documents, the server library, or persistent progress. [uv](https://docs.astral.sh/uv/) is recommended:
 
 ```bash
 git clone https://github.com/WhaleLep/parallel-reader.git
@@ -39,13 +48,13 @@ python3 app.py
 ## Basic usage
 
 1. Prepare two Markdown files: the original document and its translation.
-2. Import them from the browser, or place existing files in `documents/`.
+2. Use **Open temporary files** to keep them in the current page, use **Import to library** for persistent storage, or place existing files in `documents/`.
 3. Select both documents and start the comparison.
 4. Click a paragraph for linked highlighting, and use manual alignment when needed.
 
 To ask ChatGPT to create a strictly aligned document pair from English text or a public URL, use the [document-generation prompt (Chinese)](docs/translation-prompt.zh-CN.md).
 
-Imported files, paragraph mappings, and reading progress are stored in `data/`. They are ignored by Git by default.
+Library imports, paragraph mappings, and reading progress are stored in `data/`. When either side of a pair is temporary, its files, mappings, and progress remain only in the current page memory and disappear when the page is closed or refreshed. Persistent data is ignored by Git by default.
 
 ## Docker deployment
 
