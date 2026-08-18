@@ -9,12 +9,14 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 
-DOCUMENTS_DIR = Path(os.environ.get("DOCUMENTS_DIR", "/documents")).resolve()
-DATA_DIR = Path(os.environ.get("DATA_DIR", "/data")).resolve()
+BASE_DIR = Path(__file__).resolve().parent
+DOCUMENTS_DIR = Path(os.environ.get("DOCUMENTS_DIR", BASE_DIR / "documents")).resolve()
+DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data")).resolve()
 LOCAL_DOCUMENTS_DIR = DATA_DIR / "documents"
-STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static")).resolve()
+STATIC_DIR = Path(os.environ.get("STATIC_DIR", BASE_DIR / "static")).resolve()
 DB_PATH = DATA_DIR / "reader.db"
-PORT = int(os.environ.get("PORT", "8080"))
+HOST = os.environ.get("HOST", "127.0.0.1")
+PORT = int(os.environ.get("PORT", "8084"))
 MAX_BODY = 1024 * 1024
 MAX_DOCUMENT = 10 * 1024 * 1024
 
@@ -27,6 +29,7 @@ def connect_db():
 
 
 def initialize_db():
+    DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     LOCAL_DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
     with connect_db() as db:
@@ -412,6 +415,11 @@ class ReaderHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     initialize_db()
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), ReaderHandler)
-    print(f"Parallel Reader listening on {PORT}")
-    server.serve_forever()
+    server = ThreadingHTTPServer((HOST, PORT), ReaderHandler)
+    print(f"Parallel Reader listening on http://{HOST}:{PORT}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nParallel Reader stopped")
+    finally:
+        server.server_close()

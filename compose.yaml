@@ -8,6 +8,7 @@ services:
     ports:
       - "127.0.0.1:8084:8080"
     environment:
+      HOST: 0.0.0.0
       DOCUMENTS_DIR: /documents
       DATA_DIR: /data
       STATIC_DIR: /app/static
@@ -15,8 +16,8 @@ services:
     volumes:
       - ./app.py:/app/app.py:ro
       - ./static:/app/static:ro
-      - ${LEAFWIKI_DOCUMENTS_PATH:-/data/leafwiki/root}:/documents:ro
-      - ${READER_DATA_PATH:-/data/parallel-reader}:/data
+      - ${LEAFWIKI_DOCUMENTS_PATH:-./documents}:/documents:ro
+      - ${READER_DATA_PATH:-./data}:/data
     read_only: true
     tmpfs:
       - /tmp:size=8m,mode=1777
