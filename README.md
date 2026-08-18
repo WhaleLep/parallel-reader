@@ -25,11 +25,11 @@
 
 Markdown 文件由浏览器直接读取，渲染、自动对齐、滚动同步和手动调整均在当前页面完成。文件内容不会上传；阅读进度和段落对应也不会持久保存，并会在关闭或刷新页面后消失。
 
-纯前端模式不能使用 LeafWiki 文档、服务器书库以及持久化进度。页面尝试读取书库时可能显示后端不可用，但不影响临时阅读。
+纯前端模式不能使用服务器的只读文档目录、文档书库以及持久化进度。页面尝试读取书库时可能显示后端不可用，但不影响临时阅读。
 
 ## 完整模式
 
-如需 LeafWiki 文档、服务器书库和持久化进度，请运行 Python 后端。推荐使用 [uv](https://docs.astral.sh/uv/)：
+如需只读文档目录、服务器书库和持久化进度，请运行 Python 后端。推荐使用 [uv](https://docs.astral.sh/uv/)：
 
 ```bash
 git clone https://github.com/WhaleLep/parallel-reader.git
@@ -65,7 +65,7 @@ mkdir -p data documents
 docker compose up -d
 ```
 
-默认使用项目内的 `data/` 和 `documents/`。需要挂载其他目录时：
+默认使用项目内的 `data/` 和 `documents/`。需要挂载其他目录时，可在 `.env` 中设置 `DOCUMENTS_PATH` 和 `READER_DATA_PATH`：
 
 ```bash
 cp .env.example .env

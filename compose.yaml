@@ -16,7 +16,7 @@ services:
     volumes:
       - ./app.py:/app/app.py:ro
       - ./static:/app/static:ro
-      - ${LEAFWIKI_DOCUMENTS_PATH:-./documents}:/documents:ro
+      - ${DOCUMENTS_PATH:-${LEAFWIKI_DOCUMENTS_PATH:-./documents}}:/documents:ro
       - ${READER_DATA_PATH:-./data}:/data
     read_only: true
     tmpfs:

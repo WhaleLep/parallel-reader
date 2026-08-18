@@ -53,13 +53,15 @@ def initialize_db():
             );
             """
         )
+        db.execute("UPDATE pairs SET source='readonly:' || substr(source, 6) WHERE source LIKE 'wiki:%'")
+        db.execute("UPDATE pairs SET translation='readonly:' || substr(translation, 6) WHERE translation LIKE 'wiki:%'")
         db.execute(
-            "UPDATE pairs SET source='wiki:' || source "
-            "WHERE source NOT LIKE 'wiki:%' AND source NOT LIKE 'local:%'"
+            "UPDATE pairs SET source='readonly:' || source "
+            "WHERE source NOT LIKE 'readonly:%' AND source NOT LIKE 'local:%'"
         )
         db.execute(
-            "UPDATE pairs SET translation='wiki:' || translation "
-            "WHERE translation NOT LIKE 'wiki:%' AND translation NOT LIKE 'local:%'"
+            "UPDATE pairs SET translation='readonly:' || translation "
+            "WHERE translation NOT LIKE 'readonly:%' AND translation NOT LIKE 'local:%'"
         )
 
 
@@ -89,9 +91,14 @@ def safe_document(identifier):
         normalized = f"local:{clean}"
     else:
         root = DOCUMENTS_DIR
-        clean = identifier[5:] if identifier.startswith("wiki:") else identifier
+        if identifier.startswith("readonly:"):
+            clean = identifier[9:]
+        elif identifier.startswith("wiki:"):
+            clean = identifier[5:]
+        else:
+            clean = identifier
         clean = clean.replace("\\", "/").lstrip("/")
-        normalized = f"wiki:{clean}"
+        normalized = f"readonly:{clean}"
     target = (root / clean).resolve()
     try:
         target.relative_to(root)
@@ -113,9 +120,9 @@ def list_documents():
         stat = path.stat()
         documents.append(
             {
-                "path": f"wiki:{relative}",
+                "path": f"readonly:{relative}",
                 "name": path.stem,
-                "origin": "wiki",
+                "origin": "readonly",
                 "display_path": relative,
                 "modified_at": int(stat.st_mtime),
                 "size": stat.st_size,

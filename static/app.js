@@ -97,7 +97,7 @@ async function requestJson(url, options = {}) {
 
 function documentLabel(item) {
   if (!item) return "未知文档";
-  const origin = item.origin === "temporary" ? "临时" : item.origin === "local" ? "书库" : "LeafWiki";
+  const origin = item.origin === "temporary" ? "临时" : item.origin === "local" ? "书库" : "只读";
   return `${origin} · ${item.display_path.replace(/\.md$/i, "")}`;
 }
 
@@ -110,8 +110,9 @@ function findDocument(identifier) {
 }
 
 function normalizeSavedIdentifier(identifier) {
-  if (!identifier || identifier.startsWith("wiki:") || identifier.startsWith("local:")) return identifier;
-  return `wiki:${identifier}`;
+  if (!identifier || identifier.startsWith("readonly:") || identifier.startsWith("local:")) return identifier;
+  if (identifier.startsWith("wiki:")) return `readonly:${identifier.slice(5)}`;
+  return `readonly:${identifier}`;
 }
 
 function populateDocuments() {

@@ -25,11 +25,11 @@ The **Open temporary files** workflow does not require `app.py`. Open `static/in
 
 The browser reads the Markdown files directly. Rendering, automatic alignment, synchronized navigation, and manual corrections all run in the current page. File contents are never uploaded; reading progress and alignment are not persisted and disappear when the page is closed or refreshed.
 
-LeafWiki documents, the server library, and persistent progress are unavailable in frontend-only mode. The page may report that the library backend is unavailable, but temporary reading still works.
+The server's read-only document directory, document library, and persistent progress are unavailable in frontend-only mode. The page may report that the library backend is unavailable, but temporary reading still works.
 
 ## Full application
 
-Run the Python backend when you need LeafWiki documents, the server library, or persistent progress. [uv](https://docs.astral.sh/uv/) is recommended:
+Run the Python backend when you need a read-only document directory, the server library, or persistent progress. [uv](https://docs.astral.sh/uv/) is recommended:
 
 ```bash
 git clone https://github.com/WhaleLep/parallel-reader.git
@@ -65,7 +65,7 @@ mkdir -p data documents
 docker compose up -d
 ```
 
-The default mounts use the project-local `data/` and `documents/` directories. To use other host paths:
+The default mounts use the project-local `data/` and `documents/` directories. To use other host paths, set `DOCUMENTS_PATH` and `READER_DATA_PATH` in `.env`:
 
 ```bash
 cp .env.example .env
