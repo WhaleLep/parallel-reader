@@ -18,6 +18,16 @@
 - 手机端自动切换为上下布局。
 - 无前端构建步骤；Markdown 渲染器随项目部署，不依赖 CDN。
 
+## 效果预览
+
+### 双栏同步阅读
+
+![Parallel Reader 双栏同步阅读演示](docs/images/parallel-reader-demo.gif)
+
+### 完整界面
+
+![Parallel Reader 完整界面](docs/images/parallel-reader-overview.png)
+
 ## 快速开始
 
 需要 Docker 和 Docker Compose。
@@ -70,6 +80,10 @@ parallel-reader/
 ├── compose.yaml
 ├── LICENSE
 ├── THIRD_PARTY_NOTICES.md
+├── docs/
+│   └── images/
+│       ├── parallel-reader-demo.gif
+│       └── parallel-reader-overview.png
 └── static/
     ├── index.html
     ├── style.css
