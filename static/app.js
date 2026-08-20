@@ -7,6 +7,14 @@ const elements = {
   syncMode: document.getElementById("sync-mode"),
   mappingButton: document.getElementById("mapping-button"),
   resetMappingButton: document.getElementById("reset-mapping-button"),
+  vocabularyButton: document.getElementById("vocabulary-button"),
+  vocabularyAddButton: document.getElementById("vocabulary-add-button"),
+  vocabularyDialog: document.getElementById("vocabulary-dialog"),
+  vocabularyDocumentTitle: document.getElementById("vocabulary-document-title"),
+  vocabularyList: document.getElementById("vocabulary-list"),
+  closeVocabularyButton: document.getElementById("close-vocabulary-button"),
+  clearVocabularyButton: document.getElementById("clear-vocabulary-button"),
+  copyVocabularyButton: document.getElementById("copy-vocabulary-button"),
   alignmentStatus: document.getElementById("alignment-status"),
   message: document.getElementById("message"),
   reader: document.getElementById("reader"),
@@ -43,11 +51,253 @@ const state = {
   scrollFrames: { source: null, translation: null },
   progressTimer: null,
   restoredLastPair: false,
+  pendingVocabulary: null,
+  selectionTimer: null,
+  vocabulary: { documentId: "", documentTitle: "", entries: [] },
 };
+
+const VOCABULARY_STORAGE_KEY = "parallel-reader:vocabulary-batch";
 
 function showMessage(text, isError = false) {
   elements.message.textContent = text;
   elements.message.classList.toggle("error", isError);
+}
+
+function loadVocabulary() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(VOCABULARY_STORAGE_KEY) || "null");
+    if (!saved || !Array.isArray(saved.entries)) return;
+    state.vocabulary = {
+      documentId: typeof saved.documentId === "string" ? saved.documentId : "",
+      documentTitle: typeof saved.documentTitle === "string" ? saved.documentTitle : "",
+      entries: saved.entries
+        .filter((entry) => entry && typeof entry.word === "string" && typeof entry.sentence === "string")
+        .map((entry) => ({
+          id: typeof entry.id === "string" ? entry.id : crypto.randomUUID(),
+          word: entry.word,
+          sentence: entry.sentence,
+        })),
+    };
+  } catch {
+    sessionStorage.removeItem(VOCABULARY_STORAGE_KEY);
+  }
+}
+
+function saveVocabulary() {
+  sessionStorage.setItem(VOCABULARY_STORAGE_KEY, JSON.stringify(state.vocabulary));
+  updateVocabularyButton();
+}
+
+function updateVocabularyButton() {
+  const count = state.vocabulary.entries.length;
+  elements.vocabularyButton.textContent = `生词篮（${count}）`;
+  elements.copyVocabularyButton.disabled = count === 0;
+  elements.clearVocabularyButton.disabled = count === 0;
+}
+
+function normalizeVisibleText(text) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function normalizeSelectedTerm(text) {
+  return normalizeVisibleText(text).replace(
+    /^[\s"'“”‘’()[\]{}<>.,;:!?…，。；：！？]+|[\s"'“”‘’()[\]{}<>.,;:!?…，。；：！？]+$/gu,
+    "",
+  );
+}
+
+function selectionElement(node) {
+  return node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+}
+
+function sentenceContaining(text, selectionStart, selectionEnd) {
+  if (!text) return "";
+  if (typeof Intl.Segmenter === "function") {
+    const segmenter = new Intl.Segmenter("en-US", { granularity: "sentence" });
+    for (const part of segmenter.segment(text)) {
+      const partEnd = part.index + part.segment.length;
+      if (selectionStart < partEnd && selectionEnd > part.index) return normalizeVisibleText(part.segment);
+    }
+  }
+  const matches = text.matchAll(/[^.!?]+(?:[.!?]+["')\]]*)?|[^.!?]+$/g);
+  for (const match of matches) {
+    const start = match.index || 0;
+    const end = start + match[0].length;
+    if (selectionStart < end && selectionEnd > start) return normalizeVisibleText(match[0]);
+  }
+  return normalizeVisibleText(text);
+}
+
+function vocabularyFromSelection() {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount !== 1 || state.mappingMode) return null;
+  const range = selection.getRangeAt(0);
+  const startElement = selectionElement(range.startContainer);
+  const endElement = selectionElement(range.endContainer);
+  if (!startElement || !endElement || !elements.sourceContent.contains(startElement) || !elements.sourceContent.contains(endElement)) {
+    return null;
+  }
+  const startBlock = startElement.closest(".doc-block");
+  const endBlock = endElement.closest(".doc-block");
+  if (!startBlock || startBlock !== endBlock) return null;
+
+  const word = normalizeSelectedTerm(selection.toString());
+  if (!word || word.length > 160) return null;
+
+  const contextSelector = "p,li,td,th,h1,h2,h3,h4,h5,h6,blockquote,pre";
+  let context = startElement.closest(contextSelector);
+  if (!context || !context.contains(endElement)) context = startBlock;
+  const contextText = context.textContent || "";
+  const before = range.cloneRange();
+  before.selectNodeContents(context);
+  before.setEnd(range.startContainer, range.startOffset);
+  const selectionStart = before.toString().length;
+  const selectionEnd = selectionStart + range.toString().length;
+  const sourceItem = findDocument(state.pair?.source || elements.sourceSelect.value);
+
+  return {
+    word,
+    sentence: sentenceContaining(contextText, selectionStart, selectionEnd),
+    documentId: sourceItem?.path || state.pair?.source || elements.sourceSelect.value,
+    documentTitle: sourceItem?.name || elements.sourceName.textContent || "未命名文档",
+    rect: range.getBoundingClientRect(),
+  };
+}
+
+function hideVocabularyAddButton(clearPending = true) {
+  elements.vocabularyAddButton.classList.add("hidden");
+  if (clearPending) state.pendingVocabulary = null;
+}
+
+function showVocabularyAddButton(candidate) {
+  state.pendingVocabulary = candidate;
+  const left = Math.max(74, Math.min(window.innerWidth - 74, candidate.rect.left + candidate.rect.width / 2));
+  const top = Math.max(8, candidate.rect.top - 46);
+  elements.vocabularyAddButton.style.left = `${left}px`;
+  elements.vocabularyAddButton.style.top = `${top}px`;
+  elements.vocabularyAddButton.classList.remove("hidden");
+}
+
+function refreshVocabularySelection() {
+  const candidate = vocabularyFromSelection();
+  if (candidate) showVocabularyAddButton(candidate);
+  else hideVocabularyAddButton();
+}
+
+function scheduleVocabularySelection() {
+  clearTimeout(state.selectionTimer);
+  state.selectionTimer = setTimeout(refreshVocabularySelection, 80);
+}
+
+function addPendingVocabulary() {
+  const candidate = state.pendingVocabulary;
+  if (!candidate) return;
+  if (state.vocabulary.documentId && state.vocabulary.documentId !== candidate.documentId) {
+    state.vocabulary = { documentId: candidate.documentId, documentTitle: candidate.documentTitle, entries: [] };
+  }
+  if (!state.vocabulary.documentId) {
+    state.vocabulary.documentId = candidate.documentId;
+    state.vocabulary.documentTitle = candidate.documentTitle;
+  }
+  const duplicate = state.vocabulary.entries.some(
+    (entry) => entry.word.toLocaleLowerCase() === candidate.word.toLocaleLowerCase() && entry.sentence === candidate.sentence,
+  );
+  if (duplicate) {
+    showMessage(`“${candidate.word}”已经在本次生词篮中。`, false);
+  } else {
+    state.vocabulary.entries.push({ id: crypto.randomUUID(), word: candidate.word, sentence: candidate.sentence });
+    saveVocabulary();
+    showMessage(`已将“${candidate.word}”加入生词篮。`, false);
+  }
+  window.getSelection()?.removeAllRanges();
+  hideVocabularyAddButton();
+}
+
+function renderVocabulary() {
+  const entries = state.vocabulary.entries;
+  elements.vocabularyDocumentTitle.textContent = entries.length
+    ? state.vocabulary.documentTitle
+    : "尚未采集生词";
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-vocabulary";
+    empty.textContent = "在英文原文中选中单词或短语，即可加入本次生词篮。";
+    elements.vocabularyList.replaceChildren(empty);
+    updateVocabularyButton();
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  entries.forEach((entry, index) => {
+    const row = document.createElement("div");
+    row.className = "vocabulary-row";
+    const number = document.createElement("span");
+    number.className = "vocabulary-number";
+    number.textContent = String(index + 1);
+    const fields = document.createElement("div");
+    fields.className = "vocabulary-fields";
+    const word = document.createElement("input");
+    word.type = "text";
+    word.value = entry.word;
+    word.setAttribute("aria-label", `第 ${index + 1} 条生词`);
+    word.addEventListener("input", () => {
+      entry.word = word.value;
+      saveVocabulary();
+    });
+    const sentence = document.createElement("textarea");
+    sentence.rows = 2;
+    sentence.value = entry.sentence;
+    sentence.setAttribute("aria-label", `第 ${index + 1} 条原句`);
+    sentence.addEventListener("input", () => {
+      entry.sentence = sentence.value;
+      saveVocabulary();
+    });
+    fields.append(word, sentence);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary vocabulary-remove";
+    remove.textContent = "删除";
+    remove.addEventListener("click", () => {
+      state.vocabulary.entries = state.vocabulary.entries.filter((item) => item.id !== entry.id);
+      if (!state.vocabulary.entries.length) state.vocabulary = { documentId: "", documentTitle: "", entries: [] };
+      saveVocabulary();
+      renderVocabulary();
+    });
+    row.append(number, fields, remove);
+    fragment.appendChild(row);
+  });
+  elements.vocabularyList.replaceChildren(fragment);
+  updateVocabularyButton();
+}
+
+function buildVocabularyPrompt() {
+  const items = state.vocabulary.entries.map((entry, index) => (
+    `${index + 1}. word: ${entry.word.trim()}\n   sentence: ${entry.sentence.trim()}`
+  )).join("\n\n");
+  return `我正在通过英文技术文档学习英语。下面是我本次阅读遇到的生词。\n\n文档：${state.vocabulary.documentTitle}\n\n${items}\n\n请按照下面规则带我学习：\n\n1. 按列表顺序处理，一次只学习一个词，不要一次讲解所有单词。\n2. 根据当前句子，用简单中文解释这个词在这里的准确含义和语气。\n3. 告诉我为什么作者用这个词，以及删掉它后意思有什么变化。\n4. 给我 3 个最常见的搭配或句型。\n5. 给我 5 个程序员或技术文档场景中的例句。\n6. 告诉我 2～3 个容易混淆的近义词，并解释区别。\n7. 然后停止讲解，开始测试我：一次给我一道题，让我主动使用这个词；根据我的答案纠正，再出下一题。不要提前展示答案。\n8. 当前单词完成后，询问我是否开始下一个词。\n\n目标不是让我记住中文翻译，而是让我以后读到它能直接理解，并且能够自己使用。\n\n现在从第一个词开始。`;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("浏览器不允许访问剪贴板");
+}
+
+async function copyVocabularyPrompt() {
+  if (!state.vocabulary.entries.length) return;
+  try {
+    await copyText(buildVocabularyPrompt());
+    showMessage(`已复制 ${state.vocabulary.entries.length} 条生词的完整学习提示词。`, false);
+  } catch (error) {
+    showMessage(`复制失败：${error.message}`, true);
+  }
 }
 
 function setTopCollapsed(collapsed) {
@@ -680,6 +930,7 @@ function setMappingMode(enabled) {
 async function handleBlockClick(event) {
   const block = event.target.closest(".doc-block");
   if (!block || !state.pair) return;
+  if (!state.mappingMode && window.getSelection()?.toString().trim()) return;
   const side = block.dataset.side;
   const index = Number(block.dataset.index);
   if (!state.mappingMode) {
@@ -717,6 +968,7 @@ async function openPair() {
   if (!source || !translation) return showMessage("请先选择英文原文和中文译文。", true);
   if (source === translation) return showMessage("请选择两个不同的 Markdown 文档。", true);
   elements.openButton.disabled = true;
+  hideVocabularyAddButton();
   showMessage("正在读取并对齐文档……");
   try {
     const sourceItem = findDocument(source);
@@ -813,6 +1065,21 @@ elements.swapButton.addEventListener("click", () => {
   elements.translationSelect.value = source;
 });
 elements.mappingButton.addEventListener("click", () => setMappingMode(!state.mappingMode));
+elements.vocabularyButton.addEventListener("click", () => {
+  renderVocabulary();
+  elements.vocabularyDialog.showModal();
+});
+elements.closeVocabularyButton.addEventListener("click", () => elements.vocabularyDialog.close());
+elements.copyVocabularyButton.addEventListener("click", copyVocabularyPrompt);
+elements.clearVocabularyButton.addEventListener("click", () => {
+  if (!state.vocabulary.entries.length || !confirm("确定清空本次生词篮吗？")) return;
+  state.vocabulary = { documentId: "", documentTitle: "", entries: [] };
+  saveVocabulary();
+  renderVocabulary();
+  showMessage("已清空本次生词篮。", false);
+});
+elements.vocabularyAddButton.addEventListener("pointerdown", (event) => event.preventDefault());
+elements.vocabularyAddButton.addEventListener("click", addPendingVocabulary);
 elements.resetMappingButton.addEventListener("click", async () => {
   if (!state.pair || !confirm("重新自动对应会覆盖手动调整，确定继续吗？")) return;
   state.mapping = alignBlocks(state.sourceBlocks, state.translationBlocks);
@@ -830,6 +1097,10 @@ elements.sourceContent.addEventListener("click", handleBlockClick);
 elements.translationContent.addEventListener("click", handleBlockClick);
 elements.sourceContent.addEventListener("scroll", () => handleScroll("source"), { passive: true });
 elements.translationContent.addEventListener("scroll", () => handleScroll("translation"), { passive: true });
+document.addEventListener("selectionchange", scheduleVocabularySelection);
+window.addEventListener("resize", () => hideVocabularyAddButton());
 
+loadVocabulary();
+updateVocabularyButton();
 applySplitRatio(parseFloat(localStorage.getItem("parallel-reader:split-ratio")) || 0.5, false);
 initialize();

@@ -59,6 +59,7 @@
       </label>
       <button id="mapping-button" class="secondary" type="button">调整对应</button>
       <button id="reset-mapping-button" class="secondary" type="button">重新自动对应</button>
+      <button id="vocabulary-button" class="secondary" type="button">生词篮（0）</button>
       <button id="collapse-top-button" class="secondary" type="button">收起顶部</button>
       <span id="alignment-status" class="status"></span>
     </section>
@@ -87,6 +88,23 @@
       <button id="close-manage-button" class="secondary" type="button">关闭</button>
     </div>
     <div id="local-document-list" class="local-document-list"></div>
+  </dialog>
+
+  <button id="vocabulary-add-button" class="primary vocabulary-add-button hidden" type="button">＋ 加入生词</button>
+
+  <dialog id="vocabulary-dialog" class="vocabulary-dialog">
+    <div class="dialog-header">
+      <div>
+        <h2>本次生词</h2>
+        <p id="vocabulary-document-title">尚未采集生词</p>
+      </div>
+      <button id="close-vocabulary-button" class="secondary" type="button">关闭</button>
+    </div>
+    <div id="vocabulary-list" class="vocabulary-list"></div>
+    <div class="vocabulary-actions">
+      <button id="clear-vocabulary-button" class="secondary" type="button">清空</button>
+      <button id="copy-vocabulary-button" class="primary" type="button">复制完整学习提示词</button>
+    </div>
   </dialog>
 
   <script src="marked.min.js"></script>

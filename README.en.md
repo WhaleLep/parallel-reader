@@ -16,6 +16,7 @@ Translations are created with an external tool such as ChatGPT. Parallel Reader 
 - Open Markdown temporarily in browser memory without uploading files, progress, or alignment
 - Import, rename, and delete local Markdown, or load an existing Markdown directory read-only
 - Collapsible controls and an adjustable desktop split
+- Select words or phrases in the English pane, capture their source sentences, and copy the batch as a ChatGPT study prompt
 - Automatic stacked layout on mobile
 - No frontend build step, CDN, or translation API dependency
 
@@ -55,6 +56,8 @@ python3 app.py
 To ask ChatGPT to create a strictly aligned document pair from English text or a public URL, use the [document-generation prompt (Chinese)](docs/translation-prompt.zh-CN.md).
 
 Library imports, paragraph mappings, and reading progress are stored in `data/`. When either side of a pair is temporary, its files, mappings, and progress remain only in the current page memory and disappear when the page is closed or refreshed. Persistent data is ignored by Git by default.
+
+The current vocabulary batch is stored only in the tab's `sessionStorage`: it survives a refresh, disappears when the tab is closed, and is never written to the server or SQLite.
 
 ## Docker deployment
 
