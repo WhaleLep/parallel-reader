@@ -51,6 +51,11 @@ def initialize_db():
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY(pair_id) REFERENCES pairs(id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS document_progress (
+                document TEXT PRIMARY KEY,
+                block INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL
+            );
             """
         )
         db.execute("UPDATE pairs SET source='readonly:' || substr(source, 6) WHERE source LIKE 'wiki:%'")
@@ -62,6 +67,11 @@ def initialize_db():
         db.execute(
             "UPDATE pairs SET translation='readonly:' || translation "
             "WHERE translation NOT LIKE 'readonly:%' AND translation NOT LIKE 'local:%'"
+        )
+        db.execute("UPDATE document_progress SET document='readonly:' || substr(document, 6) WHERE document LIKE 'wiki:%'")
+        db.execute(
+            "UPDATE document_progress SET document='readonly:' || document "
+            "WHERE document NOT LIKE 'readonly:%' AND document NOT LIKE 'local:%'"
         )
 
 
@@ -244,6 +254,20 @@ class ReaderHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         request = urlsplit(self.path)
         try:
+            if request.path == "/api/documents/open":
+                payload = self.read_json()
+                _, document = safe_document(payload.get("document", ""))
+                with connect_db() as db:
+                    progress = db.execute(
+                        "SELECT block FROM document_progress WHERE document=?",
+                        (document,),
+                    ).fetchone()
+                return self.send_json(
+                    {
+                        "document": document,
+                        "progress": dict(progress) if progress else {"block": 0},
+                    }
+                )
             if request.path != "/api/pairs/open":
                 return self.send_error_json(HTTPStatus.NOT_FOUND, "接口不存在")
             payload = self.read_json()
@@ -291,6 +315,23 @@ class ReaderHandler(BaseHTTPRequestHandler):
                 overwrite = query.get("overwrite", ["0"])[0] == "1"
                 identifier = write_local_document(name, read_request_body(self), overwrite)
                 return self.send_json({"ok": True, "path": identifier}, HTTPStatus.CREATED)
+            if request.path == "/api/documents/progress":
+                payload = self.read_json()
+                _, document = safe_document(payload.get("document", ""))
+                block = max(0, int(payload.get("block", 0)))
+                now = int(time.time())
+                with connect_db() as db:
+                    db.execute(
+                        """
+                        INSERT INTO document_progress(document, block, updated_at)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(document) DO UPDATE SET
+                            block=excluded.block,
+                            updated_at=excluded.updated_at
+                        """,
+                        (document, block, now),
+                    )
+                return self.send_json({"ok": True})
             if len(parts) != 4 or parts[:2] != ["api", "pairs"]:
                 return self.send_error_json(HTTPStatus.NOT_FOUND, "接口不存在")
             pair_id = int(parts[2])
@@ -359,6 +400,7 @@ class ReaderHandler(BaseHTTPRequestHandler):
                 with connect_db() as db:
                     db.execute("UPDATE pairs SET source=? WHERE source=?", (new_identifier, normalized))
                     db.execute("UPDATE pairs SET translation=? WHERE translation=?", (new_identifier, normalized))
+                    db.execute("UPDATE document_progress SET document=? WHERE document=?", (new_identifier, normalized))
             except Exception:
                 new_target.rename(old_target)
                 raise
@@ -395,6 +437,7 @@ class ReaderHandler(BaseHTTPRequestHandler):
                     placeholders = ",".join("?" for _ in pair_ids)
                     db.execute(f"DELETE FROM progress WHERE pair_id IN ({placeholders})", pair_ids)
                 db.execute("DELETE FROM pairs WHERE source=? OR translation=?", (normalized, normalized))
+                db.execute("DELETE FROM document_progress WHERE document=?", (normalized,))
                 target.unlink()
             self.send_json({"ok": True})
         except FileNotFoundError as error:

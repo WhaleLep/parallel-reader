@@ -11,7 +11,7 @@
     <header class="app-header">
       <div>
         <h1>对照阅读器</h1>
-        <p>选择英文原文和中文译文，按段落同步阅读</p>
+        <p>既可专注阅读单篇文档，也可对照原文和译文</p>
       </div>
     </header>
 
@@ -38,27 +38,34 @@
     </section>
 
     <section class="controls" aria-label="文档选择">
+      <label class="mode-control">
+        <span>阅读方式</span>
+        <select id="reading-mode">
+          <option value="single">单页阅读</option>
+          <option value="pair">对照阅读</option>
+        </select>
+      </label>
       <label>
-        <span>英文原文</span>
+        <span id="source-select-label">阅读文档</span>
         <select id="source-select"><option value="">选择 Markdown 文档</option></select>
       </label>
-      <button id="swap-button" class="secondary" type="button" aria-label="交换文档">⇄ 交换</button>
-      <label>
+      <button id="swap-button" class="secondary pair-only" type="button" aria-label="交换文档">⇄ 交换</button>
+      <label class="pair-only">
         <span>中文译文</span>
         <select id="translation-select"><option value="">选择 Markdown 文档</option></select>
       </label>
-      <button id="open-button" class="primary" type="button">开始对照</button>
+      <button id="open-button" class="primary" type="button">开始阅读</button>
     </section>
 
     <section id="reader-toolbar" class="reader-toolbar hidden" aria-label="阅读控制">
-      <label>同步方式
+      <label class="pair-only">同步方式
         <select id="sync-mode">
           <option value="jump">段落跳转</option>
           <option value="off">关闭同步</option>
         </select>
       </label>
-      <button id="mapping-button" class="secondary" type="button">调整对应</button>
-      <button id="reset-mapping-button" class="secondary" type="button">重新自动对应</button>
+      <button id="mapping-button" class="secondary pair-only" type="button">调整对应</button>
+      <button id="reset-mapping-button" class="secondary pair-only" type="button">重新自动对应</button>
       <button id="vocabulary-button" class="secondary" type="button">生词篮（0）</button>
       <button id="collapse-top-button" class="secondary" type="button">收起顶部</button>
       <span id="alignment-status" class="status"></span>
@@ -66,16 +73,18 @@
 
     <div id="message" class="message">正在读取 Markdown 文档列表……</div>
 
-    <section id="reader" class="reader hidden" aria-label="双语文档">
+    <section id="reader" class="reader hidden" aria-label="阅读文档">
       <div class="pane">
-        <div class="pane-title"><strong>原文</strong><span id="source-name"></span></div>
-        <article id="source-content" class="document" aria-label="英文原文"></article>
+        <div class="pane-title">
+          <strong id="source-pane-label">文档</strong><span id="source-name"></span>
+          <button id="restore-top-button" class="secondary restore-top-button hidden" type="button">显示工具栏</button>
+        </div>
+        <article id="source-content" class="document" aria-label="阅读正文"></article>
       </div>
-      <div id="splitter" class="splitter" role="separator" aria-label="调整左右文档宽度" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div>
-      <div class="pane translation-pane">
+      <div id="splitter" class="splitter pair-only" role="separator" aria-label="调整左右文档宽度" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div>
+      <div class="pane translation-pane pair-only">
         <div class="pane-title">
           <strong>译文</strong><span id="translation-name"></span>
-          <button id="restore-top-button" class="secondary restore-top-button hidden" type="button">显示工具栏</button>
         </div>
         <article id="translation-content" class="document" aria-label="中文译文"></article>
       </div>

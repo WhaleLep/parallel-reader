@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README.en.md)
 
-A lightweight, self-hosted bilingual Markdown reader. Select a source document and its translation to read them side by side with synchronized navigation, linked highlighting, and adjustable paragraph alignment.
+A lightweight, self-hosted Markdown reader. Read one document in a focused layout, or select a source and translation for synchronized side-by-side reading.
 
 Translations are created with an external tool such as ChatGPT. Parallel Reader does not call a translation API and does not require an API key.
 
@@ -10,6 +10,7 @@ Translations are created with an external tool such as ChatGPT. Parallel Reader 
 
 ## Features
 
+- Focused single-document reading with automatic paragraph highlighting and independently saved library progress
 - Side-by-side reading with paragraph-jump synchronization and linked highlighting
 - Automatic alignment for headings, paragraphs, lists, quotes, code blocks, and tables
 - Manual alignment corrections and saved reading progress
@@ -48,9 +49,9 @@ python3 app.py
 
 ## Basic usage
 
-1. Prepare two Markdown files: the original document and its translation.
+1. Prepare one Markdown file; add a translated copy when you want side-by-side reading.
 2. Use **Open temporary files** to keep them in the current page, use **Import to library** for persistent storage, or place existing files in `documents/`.
-3. Select both documents and start the comparison.
+3. Choose single-document or side-by-side mode, select the document or documents, and start reading.
 4. Click a paragraph for linked highlighting, and use manual alignment when needed.
 
 To ask ChatGPT to create a strictly aligned document pair from English text or a public URL, use the [document-generation prompt (Chinese)](docs/translation-prompt.zh-CN.md).

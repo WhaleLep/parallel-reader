@@ -1,4 +1,7 @@
 const elements = {
+  readingMode: document.getElementById("reading-mode"),
+  sourceSelectLabel: document.getElementById("source-select-label"),
+  sourcePaneLabel: document.getElementById("source-pane-label"),
   sourceSelect: document.getElementById("source-select"),
   translationSelect: document.getElementById("translation-select"),
   swapButton: document.getElementById("swap-button"),
@@ -36,6 +39,7 @@ const elements = {
 };
 
 const state = {
+  mode: "single",
   documents: [],
   temporaryDocuments: [],
   pair: null,
@@ -305,6 +309,25 @@ function setTopCollapsed(collapsed) {
   elements.restoreTopButton.classList.toggle("hidden", !collapsed);
 }
 
+function setReadingMode(mode, persist = true) {
+  const nextMode = mode === "pair" ? "pair" : "single";
+  const changed = state.mode !== nextMode;
+  state.mode = nextMode;
+  document.body.classList.toggle("single-mode", state.mode === "single");
+  elements.readingMode.value = state.mode;
+  elements.sourceSelectLabel.textContent = state.mode === "single" ? "阅读文档" : "英文原文";
+  elements.sourcePaneLabel.textContent = state.mode === "single" ? "文档" : "原文";
+  elements.openButton.textContent = state.mode === "single" ? "开始阅读" : "开始对照";
+  if (changed && state.pair) {
+    state.pair = null;
+    setTopCollapsed(false);
+    elements.reader.classList.add("hidden");
+    elements.toolbar.classList.add("hidden");
+    showMessage(state.mode === "single" ? "请选择一篇文档开始单页阅读。" : "请选择原文和译文开始对照阅读。", false);
+  }
+  if (persist) localStorage.setItem("parallel-reader:reading-mode", state.mode);
+}
+
 function applySplitRatio(ratio, persist = true) {
   const bounded = Math.max(0.25, Math.min(0.75, Number(ratio) || 0.5));
   elements.reader.style.setProperty("--source-width", `${bounded * 100}%`);
@@ -376,10 +399,13 @@ function populateDocuments() {
     if (documents.some((item) => item.path === current)) select.value = current;
   }
   if (!state.restoredLastPair) {
+    const savedSingle = normalizeSavedIdentifier(localStorage.getItem("parallel-reader:last-document"));
     const saved = JSON.parse(localStorage.getItem("parallel-reader:last-pair") || "null");
     const savedSource = normalizeSavedIdentifier(saved?.source);
     const savedTranslation = normalizeSavedIdentifier(saved?.translation);
-    if (savedSource && state.documents.some((item) => item.path === savedSource)) {
+    if (state.mode === "single" && savedSingle && state.documents.some((item) => item.path === savedSingle)) {
+      elements.sourceSelect.value = savedSingle;
+    } else if (savedSource && state.documents.some((item) => item.path === savedSource)) {
       elements.sourceSelect.value = savedSource;
     }
     if (savedTranslation && state.documents.some((item) => item.path === savedTranslation)) {
@@ -473,7 +499,9 @@ async function openTemporaryDocuments(files) {
     populateDocuments();
     if (temporaryDocuments[0]) elements.sourceSelect.value = temporaryDocuments[0].path;
     if (temporaryDocuments[1]) elements.translationSelect.value = temporaryDocuments[1].path;
-    if (temporaryDocuments.length === 2) {
+    if (state.mode === "single") {
+      await openSingle();
+    } else if (temporaryDocuments.length === 2) {
       await openPair();
     } else {
       showMessage("临时文件已载入当前页面。请选择另一篇文档后开始对照。", false);
@@ -537,7 +565,7 @@ async function deleteLocalDocument(item) {
   if (!confirm(`确定永久删除本地文档“${item.display_path}”吗？相关的阅读进度和段落对应也会删除。`)) return;
   try {
     await requestJson(`api/local-document?path=${encodeURIComponent(item.path)}`, { method: "DELETE" });
-    if (state.pair && (state.pair.source === item.path || state.pair.translation === item.path)) {
+    if (state.pair && (state.pair.document === item.path || state.pair.source === item.path || state.pair.translation === item.path)) {
       state.pair = null;
       setTopCollapsed(false);
       elements.reader.classList.add("hidden");
@@ -837,6 +865,13 @@ function scrollToBlock(side, index, behavior = "smooth") {
 
 function activateFrom(side, index, shouldScroll = true) {
   const numericIndex = Number(index);
+  if (state.pair?.single) {
+    state.activeSource = numericIndex;
+    document.querySelectorAll(".doc-block.active").forEach((node) => node.classList.remove("active"));
+    blockElement("source", numericIndex)?.classList.add("active");
+    scheduleProgressSave();
+    return;
+  }
   let sourceIndex;
   let translationIndex;
   if (side === "source") {
@@ -898,6 +933,13 @@ function scheduleProgressSave() {
   state.progressTimer = setTimeout(async () => {
     if (!state.pair || state.pair.temporary) return;
     try {
+      if (state.pair.single) {
+        await requestJson("api/documents/progress", {
+          method: "PUT",
+          body: JSON.stringify({ document: state.pair.document, block: state.activeSource }),
+        });
+        return;
+      }
       await requestJson(`api/pairs/${state.pair.id}/progress`, {
         method: "PUT",
         body: JSON.stringify({
@@ -933,6 +975,10 @@ async function handleBlockClick(event) {
   if (!state.mappingMode && window.getSelection()?.toString().trim()) return;
   const side = block.dataset.side;
   const index = Number(block.dataset.index);
+  if (state.pair.single) {
+    activateFrom("source", index, false);
+    return;
+  }
   if (!state.mappingMode) {
     activateFrom(side, index, true);
     return;
@@ -1000,6 +1046,9 @@ async function openPair() {
     elements.sourceName.textContent = documentLabel(sourceItem);
     elements.translationName.textContent = documentLabel(translationItem);
     elements.reader.classList.remove("hidden");
+    elements.reader.classList.remove("single-reader");
+    elements.reader.setAttribute("aria-label", "双语文档");
+    elements.sourceContent.setAttribute("aria-label", "英文原文");
     elements.toolbar.classList.remove("hidden");
     updateAlignmentStatus();
     if (!savedMapping) await saveMapping();
@@ -1026,17 +1075,87 @@ async function openPair() {
   }
 }
 
+async function openSingle() {
+  const documentId = elements.sourceSelect.value;
+  if (!documentId) return showMessage("请先选择一篇 Markdown 文档。", true);
+  elements.openButton.disabled = true;
+  hideVocabularyAddButton();
+  showMessage("正在读取文档……");
+  try {
+    const item = findDocument(documentId);
+    if (!item) throw new Error("文档不存在，请刷新列表后重试。");
+    const isTemporary = item.origin === "temporary";
+    const [documentData, reading] = await Promise.all([
+      isTemporary
+        ? Promise.resolve({ path: item.path, content: item.content })
+        : requestJson(`api/document?path=${encodeURIComponent(item.path)}`),
+      isTemporary
+        ? Promise.resolve({ temporary: true, document: documentId, progress: { block: 0 } })
+        : requestJson("api/documents/open", {
+          method: "POST",
+          body: JSON.stringify({ document: documentId }),
+        }),
+    ]);
+    state.pair = { ...reading, single: true };
+    state.sourceBlocks = parseMarkdownBlocks(documentData.content);
+    state.translationBlocks = [];
+    state.mapping = {};
+    state.reverseMapping = {};
+    state.mappingMode = false;
+    state.pendingSource = null;
+    elements.reader.classList.remove("mapping-mode");
+    elements.mappingButton.textContent = "调整对应";
+    renderDocument(elements.sourceContent, state.sourceBlocks, "source");
+    elements.translationContent.replaceChildren();
+    elements.sourceName.textContent = documentLabel(item);
+    elements.reader.classList.remove("hidden");
+    elements.reader.classList.add("single-reader");
+    elements.reader.setAttribute("aria-label", "单页文档");
+    elements.sourceContent.setAttribute("aria-label", "阅读正文");
+    elements.toolbar.classList.remove("hidden");
+    elements.alignmentStatus.textContent = `${state.sourceBlocks.length} 个内容块`;
+    const progress = Math.min(Number(reading.progress?.block || 0), Math.max(0, state.sourceBlocks.length - 1));
+    state.activeSource = progress;
+    requestAnimationFrame(() => {
+      scrollToBlock("source", progress, "auto");
+      activateFrom("source", progress, false);
+    });
+    if (!isTemporary) localStorage.setItem("parallel-reader:last-document", documentId);
+    showMessage(
+      isTemporary
+        ? "临时单页阅读：文件和进度只存在于当前页面，关闭或刷新后消失。"
+        : "当前阅读段落会随滚动自动高亮，阅读进度也会自动保存。",
+      false,
+    );
+  } catch (error) {
+    showMessage(error.message, true);
+  } finally {
+    elements.openButton.disabled = false;
+  }
+}
+
+function openReading() {
+  return state.mode === "single" ? openSingle() : openPair();
+}
+
 async function initialize() {
   if (!window.marked) return showMessage("Markdown 渲染组件加载失败。", true);
+  setReadingMode(localStorage.getItem("parallel-reader:reading-mode") || "single", false);
   try {
     await refreshDocuments();
-    showMessage(state.documents.length ? `找到 ${state.documents.length} 个 Markdown 文档，请选择原文和译文。` : "还没有可读的 Markdown 文档。", false);
+    showMessage(
+      state.documents.length
+        ? `找到 ${state.documents.length} 个 Markdown 文档，${state.mode === "single" ? "请选择一篇开始阅读。" : "请选择原文和译文。"}`
+        : "还没有可读的 Markdown 文档。",
+      false,
+    );
   } catch (error) {
     showMessage(error.message, true);
   }
 }
 
-elements.openButton.addEventListener("click", openPair);
+elements.openButton.addEventListener("click", openReading);
+elements.readingMode.addEventListener("change", () => setReadingMode(elements.readingMode.value));
 elements.collapseTopButton.addEventListener("click", () => setTopCollapsed(true));
 elements.restoreTopButton.addEventListener("click", () => setTopCollapsed(false));
 elements.splitter.addEventListener("pointerdown", handleSplitterPointerDown);
