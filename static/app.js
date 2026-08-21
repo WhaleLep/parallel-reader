@@ -909,6 +909,7 @@ function findReadingBlock(container) {
 }
 
 function handleScroll(side) {
+  if (state.pair?.single) return;
   if (state.scrollFrames[side]) cancelAnimationFrame(state.scrollFrames[side]);
   state.scrollFrames[side] = requestAnimationFrame(() => {
     state.scrollFrames[side] = null;
@@ -1124,7 +1125,7 @@ async function openSingle() {
     showMessage(
       isTemporary
         ? "临时单页阅读：文件和进度只存在于当前页面，关闭或刷新后消失。"
-        : "当前阅读段落会随滚动自动高亮，阅读进度也会自动保存。",
+        : "点击段落即可高亮并保存阅读位置。",
       false,
     );
   } catch (error) {

@@ -10,7 +10,7 @@ Translations are created with an external tool such as ChatGPT. Parallel Reader 
 
 ## Features
 
-- Focused single-document reading with automatic paragraph highlighting and independently saved library progress
+- Focused single-document reading with click-controlled paragraph highlighting and independently saved library progress
 - Side-by-side reading with paragraph-jump synchronization and linked highlighting
 - Automatic alignment for headings, paragraphs, lists, quotes, code blocks, and tables
 - Manual alignment corrections and saved reading progress
