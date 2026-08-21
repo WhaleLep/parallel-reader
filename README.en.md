@@ -16,7 +16,9 @@ Translations are created with an external tool such as ChatGPT. Parallel Reader 
 - Manual alignment corrections and saved reading progress
 - Open Markdown temporarily in browser memory without uploading files, progress, or alignment
 - Import, rename, and delete local Markdown, or load an existing Markdown directory read-only
-- Collapsible controls and an adjustable desktop split
+- Collapsible heading navigation with current-section highlighting and quick jumps
+- Persistent controls for font size, line height, and text width
+- Pair view can show both panes, source only, or translation only; immersive mode hides all toolbars, exits with `Esc` on desktop, and briefly reveals an exit button after tapping blank reading space on mobile
 - Select words or phrases in the English pane, capture their source sentences, and copy the batch as a ChatGPT study prompt
 - Automatic stacked layout on mobile
 - No frontend build step, CDN, or translation API dependency

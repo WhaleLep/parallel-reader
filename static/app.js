@@ -7,11 +7,17 @@ const elements = {
   swapButton: document.getElementById("swap-button"),
   openButton: document.getElementById("open-button"),
   toolbar: document.getElementById("reader-toolbar"),
+  tocButton: document.getElementById("toc-button"),
+  readerToc: document.getElementById("reader-toc"),
+  tocList: document.getElementById("toc-list"),
+  closeTocButton: document.getElementById("close-toc-button"),
   syncMode: document.getElementById("sync-mode"),
+  paneMode: document.getElementById("pane-mode"),
   mappingButton: document.getElementById("mapping-button"),
   resetMappingButton: document.getElementById("reset-mapping-button"),
   vocabularyButton: document.getElementById("vocabulary-button"),
   vocabularyAddButton: document.getElementById("vocabulary-add-button"),
+  immersiveExitButton: document.getElementById("immersive-exit-button"),
   vocabularyDialog: document.getElementById("vocabulary-dialog"),
   vocabularyDocumentTitle: document.getElementById("vocabulary-document-title"),
   vocabularyList: document.getElementById("vocabulary-list"),
@@ -34,8 +40,17 @@ const elements = {
   closeManageButton: document.getElementById("close-manage-button"),
   localDocumentList: document.getElementById("local-document-list"),
   collapseTopButton: document.getElementById("collapse-top-button"),
-  restoreTopButton: document.getElementById("restore-top-button"),
   splitter: document.getElementById("splitter"),
+  readingSettingsButton: document.getElementById("reading-settings-button"),
+  readingSettingsDialog: document.getElementById("reading-settings-dialog"),
+  closeReadingSettingsButton: document.getElementById("close-reading-settings-button"),
+  resetReadingSettingsButton: document.getElementById("reset-reading-settings-button"),
+  fontSizeRange: document.getElementById("font-size-range"),
+  fontSizeOutput: document.getElementById("font-size-output"),
+  lineHeightRange: document.getElementById("line-height-range"),
+  lineHeightOutput: document.getElementById("line-height-output"),
+  contentWidthRange: document.getElementById("content-width-range"),
+  contentWidthOutput: document.getElementById("content-width-output"),
 };
 
 const state = {
@@ -57,10 +72,16 @@ const state = {
   restoredLastPair: false,
   pendingVocabulary: null,
   selectionTimer: null,
+  immersiveExitTimer: null,
   vocabulary: { documentId: "", documentTitle: "", entries: [] },
+  paneMode: "both",
+  tocOpen: false,
 };
 
 const VOCABULARY_STORAGE_KEY = "parallel-reader:vocabulary-batch";
+const READING_SETTINGS_STORAGE_KEY = "parallel-reader:reading-settings";
+const DEFAULT_READING_SETTINGS = { fontSize: 18, lineHeight: 1.78, contentWidth: 760 };
+const READING_LINE_RATIO = 0.35;
 
 function showMessage(text, isError = false) {
   elements.message.textContent = text;
@@ -306,7 +327,129 @@ async function copyVocabularyPrompt() {
 
 function setTopCollapsed(collapsed) {
   document.body.classList.toggle("top-collapsed", collapsed);
-  elements.restoreTopButton.classList.toggle("hidden", !collapsed);
+  elements.collapseTopButton.setAttribute("aria-pressed", String(collapsed));
+  clearTimeout(state.immersiveExitTimer);
+  elements.immersiveExitButton.classList.add("hidden");
+  if (collapsed) {
+    hideVocabularyAddButton();
+    const visibleContent = state.paneMode === "translation" ? elements.translationContent : elements.sourceContent;
+    visibleContent.focus({ preventScroll: true });
+  }
+}
+
+function showImmersiveExitButton(event) {
+  if (!document.body.classList.contains("top-collapsed") || !matchMedia("(max-width: 760px)").matches) return;
+  if (event.target !== event.currentTarget || window.getSelection()?.toString().trim()) return;
+  clearTimeout(state.immersiveExitTimer);
+  elements.immersiveExitButton.classList.remove("hidden");
+  state.immersiveExitTimer = setTimeout(() => elements.immersiveExitButton.classList.add("hidden"), 3000);
+}
+
+function setTocOpen(open, persist = true) {
+  state.tocOpen = Boolean(open);
+  elements.reader.classList.toggle("toc-open", state.tocOpen);
+  elements.tocButton.setAttribute("aria-expanded", String(state.tocOpen));
+  elements.tocButton.textContent = state.tocOpen ? "收起目录" : "显示目录";
+  if (persist) localStorage.setItem("parallel-reader:toc-open", state.tocOpen ? "1" : "0");
+}
+
+function tocSide() {
+  return !state.pair?.single && state.paneMode === "translation" ? "translation" : "source";
+}
+
+function updateTocHighlight() {
+  const side = tocSide();
+  const activeIndex = side === "source" ? state.activeSource : state.activeTranslation;
+  let activeButton = null;
+  for (const button of elements.tocList.querySelectorAll(".toc-item")) {
+    button.classList.remove("active");
+    button.removeAttribute("aria-current");
+    if (Number(button.dataset.index) <= activeIndex) activeButton = button;
+  }
+  if (activeButton) {
+    activeButton.classList.add("active");
+    activeButton.setAttribute("aria-current", "location");
+  }
+}
+
+function renderToc() {
+  const side = tocSide();
+  const container = side === "source" ? elements.sourceContent : elements.translationContent;
+  const headings = [...container.querySelectorAll(".doc-block")]
+    .map((block) => ({ block, heading: block.querySelector("h1,h2,h3,h4,h5,h6") }))
+    .filter((item) => item.heading);
+  if (!headings.length) {
+    const empty = document.createElement("div");
+    empty.className = "toc-empty";
+    empty.textContent = "这篇文档没有标题";
+    elements.tocList.replaceChildren(empty);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const { block, heading } of headings) {
+    const button = document.createElement("button");
+    const level = Number(heading.tagName.slice(1));
+    button.type = "button";
+    button.className = `toc-item toc-level-${level}`;
+    button.dataset.index = block.dataset.index;
+    button.textContent = heading.textContent.trim() || "未命名章节";
+    button.addEventListener("click", () => {
+      const index = Number(block.dataset.index);
+      scrollToBlock(side, index);
+      activateFrom(side, index, !state.pair?.single && state.paneMode === "both");
+      if (matchMedia("(max-width: 760px)").matches) setTocOpen(false);
+    });
+    fragment.appendChild(button);
+  }
+  elements.tocList.replaceChildren(fragment);
+  updateTocHighlight();
+}
+
+function setPaneMode(mode, persist = true) {
+  const nextMode = ["source", "translation"].includes(mode) ? mode : "both";
+  state.paneMode = nextMode;
+  elements.paneMode.value = nextMode;
+  document.body.classList.toggle("single-pane-view", !state.pair?.single && nextMode !== "both");
+  elements.reader.classList.toggle("source-only", !state.pair?.single && nextMode === "source");
+  elements.reader.classList.toggle("translation-only", !state.pair?.single && nextMode === "translation");
+  if (persist) localStorage.setItem("parallel-reader:pane-mode", nextMode);
+  if (state.pair) {
+    renderToc();
+    requestAnimationFrame(() => {
+      if (nextMode === "translation") scrollToBlock("translation", state.activeTranslation, "auto");
+      else scrollToBlock("source", state.activeSource, "auto");
+    });
+  }
+}
+
+function normalizeReadingSettings(settings = {}) {
+  return {
+    fontSize: Math.max(14, Math.min(26, Number(settings.fontSize) || DEFAULT_READING_SETTINGS.fontSize)),
+    lineHeight: Math.max(1.4, Math.min(2.2, Number(settings.lineHeight) || DEFAULT_READING_SETTINGS.lineHeight)),
+    contentWidth: Math.max(560, Math.min(1080, Number(settings.contentWidth) || DEFAULT_READING_SETTINGS.contentWidth)),
+  };
+}
+
+function applyReadingSettings(settings, persist = true) {
+  const normalized = normalizeReadingSettings(settings);
+  document.documentElement.style.setProperty("--reader-font-size", `${normalized.fontSize}px`);
+  document.documentElement.style.setProperty("--reader-line-height", String(normalized.lineHeight));
+  document.documentElement.style.setProperty("--reader-content-width", `${normalized.contentWidth}px`);
+  elements.fontSizeRange.value = String(normalized.fontSize);
+  elements.lineHeightRange.value = String(normalized.lineHeight);
+  elements.contentWidthRange.value = String(normalized.contentWidth);
+  elements.fontSizeOutput.textContent = `${normalized.fontSize} px`;
+  elements.lineHeightOutput.textContent = normalized.lineHeight.toFixed(2);
+  elements.contentWidthOutput.textContent = `${normalized.contentWidth} px`;
+  if (persist) localStorage.setItem(READING_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
+}
+
+function readingSettingsFromControls() {
+  return {
+    fontSize: elements.fontSizeRange.value,
+    lineHeight: elements.lineHeightRange.value,
+    contentWidth: elements.contentWidthRange.value,
+  };
 }
 
 function setReadingMode(mode, persist = true) {
@@ -860,7 +1003,7 @@ function scrollToBlock(side, index, behavior = "smooth") {
   const target = blockElement(side, index);
   if (!target) return;
   state.ignoreScrollUntil[side] = Date.now() + (behavior === "smooth" ? 700 : 100);
-  container.scrollTo({ top: Math.max(0, target.offsetTop - container.clientHeight * 0.27), behavior });
+  container.scrollTo({ top: Math.max(0, target.offsetTop - container.clientHeight * READING_LINE_RATIO), behavior });
 }
 
 function activateFrom(side, index, shouldScroll = true) {
@@ -869,6 +1012,7 @@ function activateFrom(side, index, shouldScroll = true) {
     state.activeSource = numericIndex;
     document.querySelectorAll(".doc-block.active").forEach((node) => node.classList.remove("active"));
     blockElement("source", numericIndex)?.classList.add("active");
+    updateTocHighlight();
     scheduleProgressSave();
     return;
   }
@@ -886,6 +1030,7 @@ function activateFrom(side, index, shouldScroll = true) {
   document.querySelectorAll(".doc-block.active").forEach((node) => node.classList.remove("active"));
   blockElement("source", sourceIndex)?.classList.add("active");
   blockElement("translation", translationIndex)?.classList.add("active");
+  updateTocHighlight();
   if (shouldScroll && elements.syncMode.value === "jump") {
     scrollToBlock(side === "source" ? "translation" : "source", side === "source" ? translationIndex : sourceIndex);
   }
@@ -895,7 +1040,7 @@ function activateFrom(side, index, shouldScroll = true) {
 function findReadingBlock(container) {
   const blocks = [...container.querySelectorAll(".doc-block")];
   if (!blocks.length) return 0;
-  const readingLine = container.getBoundingClientRect().top + container.clientHeight * 0.28;
+  const readingLine = container.getBoundingClientRect().top + container.clientHeight * READING_LINE_RATIO;
   let selected = blocks[0];
   for (const block of blocks) {
     const rect = block.getBoundingClientRect();
@@ -909,13 +1054,17 @@ function findReadingBlock(container) {
 }
 
 function handleScroll(side) {
-  if (state.pair?.single) return;
+  if (state.pair?.single && side !== "source") return;
   if (state.scrollFrames[side]) cancelAnimationFrame(state.scrollFrames[side]);
   state.scrollFrames[side] = requestAnimationFrame(() => {
     state.scrollFrames[side] = null;
     if (Date.now() < state.ignoreScrollUntil[side]) return;
     const container = side === "source" ? elements.sourceContent : elements.translationContent;
     const index = findReadingBlock(container);
+    if (state.pair?.single) {
+      if (index !== state.activeSource) activateFrom("source", index, false);
+      return;
+    }
     const current = side === "source" ? state.activeSource : state.activeTranslation;
     if (index !== current) activateFrom(side, index, elements.syncMode.value === "jump");
   });
@@ -1051,6 +1200,7 @@ async function openPair() {
     elements.reader.setAttribute("aria-label", "双语文档");
     elements.sourceContent.setAttribute("aria-label", "英文原文");
     elements.toolbar.classList.remove("hidden");
+    setPaneMode(state.paneMode, false);
     updateAlignmentStatus();
     if (!savedMapping) await saveMapping();
     const sourceProgress = Math.min(Number(pair.progress?.source_block || 0), Math.max(0, state.sourceBlocks.length - 1));
@@ -1111,9 +1261,12 @@ async function openSingle() {
     elements.sourceName.textContent = documentLabel(item);
     elements.reader.classList.remove("hidden");
     elements.reader.classList.add("single-reader");
+    elements.reader.classList.remove("source-only", "translation-only");
+    document.body.classList.remove("single-pane-view");
     elements.reader.setAttribute("aria-label", "单页文档");
     elements.sourceContent.setAttribute("aria-label", "阅读正文");
     elements.toolbar.classList.remove("hidden");
+    renderToc();
     elements.alignmentStatus.textContent = `${state.sourceBlocks.length} 个内容块`;
     const progress = Math.min(Number(reading.progress?.block || 0), Math.max(0, state.sourceBlocks.length - 1));
     state.activeSource = progress;
@@ -1142,6 +1295,14 @@ function openReading() {
 async function initialize() {
   if (!window.marked) return showMessage("Markdown 渲染组件加载失败。", true);
   setReadingMode(localStorage.getItem("parallel-reader:reading-mode") || "single", false);
+  state.paneMode = localStorage.getItem("parallel-reader:pane-mode") || "both";
+  elements.paneMode.value = state.paneMode;
+  setTocOpen(localStorage.getItem("parallel-reader:toc-open") === "1", false);
+  try {
+    applyReadingSettings(JSON.parse(localStorage.getItem(READING_SETTINGS_STORAGE_KEY) || "null") || DEFAULT_READING_SETTINGS, false);
+  } catch {
+    applyReadingSettings(DEFAULT_READING_SETTINGS, false);
+  }
   try {
     await refreshDocuments();
     showMessage(
@@ -1158,7 +1319,16 @@ async function initialize() {
 elements.openButton.addEventListener("click", openReading);
 elements.readingMode.addEventListener("change", () => setReadingMode(elements.readingMode.value));
 elements.collapseTopButton.addEventListener("click", () => setTopCollapsed(true));
-elements.restoreTopButton.addEventListener("click", () => setTopCollapsed(false));
+elements.tocButton.addEventListener("click", () => setTocOpen(!state.tocOpen));
+elements.closeTocButton.addEventListener("click", () => setTocOpen(false));
+elements.paneMode.addEventListener("change", () => setPaneMode(elements.paneMode.value));
+elements.readingSettingsButton.addEventListener("click", () => elements.readingSettingsDialog.showModal());
+elements.closeReadingSettingsButton.addEventListener("click", () => elements.readingSettingsDialog.close());
+elements.immersiveExitButton.addEventListener("click", () => setTopCollapsed(false));
+elements.resetReadingSettingsButton.addEventListener("click", () => applyReadingSettings(DEFAULT_READING_SETTINGS));
+for (const control of [elements.fontSizeRange, elements.lineHeightRange, elements.contentWidthRange]) {
+  control.addEventListener("input", () => applyReadingSettings(readingSettingsFromControls()));
+}
 elements.splitter.addEventListener("pointerdown", handleSplitterPointerDown);
 elements.splitter.addEventListener("pointermove", handleSplitterPointerMove);
 elements.splitter.addEventListener("pointerup", finishSplitterResize);
@@ -1215,9 +1385,21 @@ elements.resetMappingButton.addEventListener("click", async () => {
 });
 elements.sourceContent.addEventListener("click", handleBlockClick);
 elements.translationContent.addEventListener("click", handleBlockClick);
+elements.sourceContent.addEventListener("click", showImmersiveExitButton);
+elements.translationContent.addEventListener("click", showImmersiveExitButton);
 elements.sourceContent.addEventListener("scroll", () => handleScroll("source"), { passive: true });
 elements.translationContent.addEventListener("scroll", () => handleScroll("translation"), { passive: true });
 document.addEventListener("selectionchange", scheduleVocabularySelection);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && document.body.classList.contains("top-collapsed")) {
+    setTopCollapsed(false);
+    return;
+  }
+  if (document.body.classList.contains("top-collapsed") && event.key.toLowerCase() === "t" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    event.preventDefault();
+    setTocOpen(!state.tocOpen);
+  }
+});
 window.addEventListener("resize", () => hideVocabularyAddButton());
 
 loadVocabulary();

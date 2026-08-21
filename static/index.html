@@ -58,35 +58,50 @@
     </section>
 
     <section id="reader-toolbar" class="reader-toolbar hidden" aria-label="阅读控制">
-      <label class="pair-only">同步方式
+      <button id="toc-button" class="secondary" type="button" aria-expanded="false" aria-controls="reader-toc">显示目录</button>
+      <label class="pair-only dual-pane-control">同步方式
         <select id="sync-mode">
           <option value="jump">段落跳转</option>
           <option value="off">关闭同步</option>
         </select>
       </label>
-      <button id="mapping-button" class="secondary pair-only" type="button">调整对应</button>
-      <button id="reset-mapping-button" class="secondary pair-only" type="button">重新自动对应</button>
+      <label class="pair-only">显示栏位
+        <select id="pane-mode">
+          <option value="both">原文与译文</option>
+          <option value="source">仅原文</option>
+          <option value="translation">仅译文</option>
+        </select>
+      </label>
+      <button id="mapping-button" class="secondary pair-only dual-pane-control" type="button">调整对应</button>
+      <button id="reset-mapping-button" class="secondary pair-only dual-pane-control" type="button">重新自动对应</button>
+      <button id="reading-settings-button" class="secondary" type="button">阅读设置</button>
       <button id="vocabulary-button" class="secondary" type="button">生词篮（0）</button>
-      <button id="collapse-top-button" class="secondary" type="button">收起顶部</button>
+      <button id="collapse-top-button" class="secondary" type="button" title="按 Esc 退出沉浸阅读">沉浸阅读</button>
       <span id="alignment-status" class="status"></span>
     </section>
 
     <div id="message" class="message">正在读取 Markdown 文档列表……</div>
 
     <section id="reader" class="reader hidden" aria-label="阅读文档">
-      <div class="pane">
+      <aside id="reader-toc" class="reader-toc" aria-label="文档目录">
+        <div class="toc-header">
+          <strong>目录</strong>
+          <button id="close-toc-button" class="secondary" type="button" aria-label="收起目录">收起</button>
+        </div>
+        <nav id="toc-list" class="toc-list" aria-label="章节目录"></nav>
+      </aside>
+      <div class="pane source-pane">
         <div class="pane-title">
           <strong id="source-pane-label">文档</strong><span id="source-name"></span>
-          <button id="restore-top-button" class="secondary restore-top-button hidden" type="button">显示工具栏</button>
         </div>
-        <article id="source-content" class="document" aria-label="阅读正文"></article>
+        <article id="source-content" class="document" aria-label="阅读正文" tabindex="-1"></article>
       </div>
       <div id="splitter" class="splitter pair-only" role="separator" aria-label="调整左右文档宽度" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div>
       <div class="pane translation-pane pair-only">
         <div class="pane-title">
           <strong>译文</strong><span id="translation-name"></span>
         </div>
-        <article id="translation-content" class="document" aria-label="中文译文"></article>
+        <article id="translation-content" class="document" aria-label="中文译文" tabindex="-1"></article>
       </div>
     </section>
   </main>
@@ -100,6 +115,7 @@
   </dialog>
 
   <button id="vocabulary-add-button" class="primary vocabulary-add-button hidden" type="button">＋ 加入生词</button>
+  <button id="immersive-exit-button" class="secondary immersive-exit-button hidden" type="button">退出沉浸</button>
 
   <dialog id="vocabulary-dialog" class="vocabulary-dialog">
     <div class="dialog-header">
@@ -113,6 +129,25 @@
     <div class="vocabulary-actions">
       <button id="clear-vocabulary-button" class="secondary" type="button">清空</button>
       <button id="copy-vocabulary-button" class="primary" type="button">复制完整学习提示词</button>
+    </div>
+  </dialog>
+
+  <dialog id="reading-settings-dialog" class="reading-settings-dialog">
+    <div class="dialog-header">
+      <div>
+        <h2>阅读设置</h2>
+        <p>设置会保存在当前浏览器中</p>
+      </div>
+      <button id="close-reading-settings-button" class="secondary" type="button">完成</button>
+    </div>
+    <div class="reading-settings">
+      <label for="font-size-range"><span>字号</span><output id="font-size-output"></output></label>
+      <input id="font-size-range" type="range" min="14" max="26" step="1">
+      <label for="line-height-range"><span>行高</span><output id="line-height-output"></output></label>
+      <input id="line-height-range" type="range" min="1.4" max="2.2" step="0.05">
+      <label for="content-width-range"><span>正文宽度</span><output id="content-width-output"></output></label>
+      <input id="content-width-range" type="range" min="560" max="1080" step="20">
+      <button id="reset-reading-settings-button" class="secondary" type="button">恢复默认</button>
     </div>
   </dialog>
 
