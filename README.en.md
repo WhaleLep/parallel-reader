@@ -54,7 +54,7 @@ python3 app.py
 1. Prepare one Markdown file; add a translated copy when you want side-by-side reading.
 2. Use **Open temporary files** to keep them in the current page, use **Import to library** for persistent storage, or place existing files in `documents/`.
 3. Choose single-document or side-by-side mode, select the document or documents, and start reading.
-4. Click a paragraph for linked highlighting, and use manual alignment when needed.
+4. In single-document mode, click a paragraph to highlight it manually; scrolling updates progress and navigation without changing the text highlight. In side-by-side mode, click either pane for linked highlighting and use manual alignment when needed.
 
 To ask ChatGPT to create a strictly aligned document pair from English text or a public URL, use the [document-generation prompt (Chinese)](docs/translation-prompt.zh-CN.md).
 
