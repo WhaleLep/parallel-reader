@@ -1010,8 +1010,6 @@ function activateFrom(side, index, shouldScroll = true) {
   const numericIndex = Number(index);
   if (state.pair?.single) {
     state.activeSource = numericIndex;
-    document.querySelectorAll(".doc-block.active").forEach((node) => node.classList.remove("active"));
-    blockElement("source", numericIndex)?.classList.add("active");
     updateTocHighlight();
     scheduleProgressSave();
     return;
@@ -1127,6 +1125,8 @@ async function handleBlockClick(event) {
   const index = Number(block.dataset.index);
   if (state.pair.single) {
     activateFrom("source", index, false);
+    elements.sourceContent.querySelectorAll(".doc-block.active").forEach((node) => node.classList.remove("active"));
+    block.classList.add("active");
     return;
   }
   if (!state.mappingMode) {
